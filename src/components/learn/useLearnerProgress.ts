@@ -35,8 +35,8 @@ export function useLearnerProgress(
       return 'locked';
     };
 
-    const roadmapStepsDerived = [
-      { title: 'Foundation', status: completedCount >= 2 ? 'done' : completedCount >= 0 ? 'current' : 'locked' },
+    const roadmapStepsDerived: Array<{ title: string; status: 'done' | 'current' | 'locked' }> = [
+      { title: 'Foundation', status: completedCount >= 2 ? 'done' : 'current' },
       { title: 'Everyday Bisaya', status: completedCount >= 4 ? 'done' : completedCount >= 2 ? 'current' : 'locked' },
       { title: 'Real Conversations', status: completedCount >= 6 ? 'done' : completedCount >= 4 ? 'current' : 'locked' },
       { title: 'Real-World Practice', status: completedCount >= 8 ? 'done' : completedCount >= 6 ? 'current' : 'locked' },
