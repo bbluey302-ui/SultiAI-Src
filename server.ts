@@ -1903,15 +1903,3 @@ server.listen(PORT, '0.0.0.0', () => {
 });
 
 // ----------------------------------------------------------------------------
-// Authoritative lesson completion + progress (Stage 2)
-// ----------------------------------------------------------------------------
-import { lessonCompleteHandler, progressHandler } from './server/lessonComplete';
-
-app.post('/api/learner/lesson-complete', lessonCompleteHandler);
-app.get('/api/learner/progress', progressHandler);
-
-
-import { lessonCompleteHandler, progressHandler } from './server/lessonComplete';
-app.post('/api/learner/lesson-complete', lessonCompleteHandler);
-app.get('/api/learner/progress', progressHandler);
-
