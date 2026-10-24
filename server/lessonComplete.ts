@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { resolveIdentity } from './authIdentity';
+import { resolveIdentity } from './ai';
 import { getLessonFromCatalog } from './lessonCatalog';
 import { recordActivity } from './learnerActivity';
 import { supabaseServer } from './supabaseServer';
@@ -22,7 +22,6 @@ export async function lessonCompleteHandler(req: Request, res: Response) {
 
   const lessonLanguage = language || catalogLesson.language;
 
-  // Check if already completed
   if (supabaseServer) {
     const { data: existing } = await supabaseServer
       .from('completed_lessons')
@@ -46,7 +45,6 @@ export async function lessonCompleteHandler(req: Request, res: Response) {
   const xpAwarded = Math.min(Math.max(Number(catalogLesson.xpReward) || 0, 0), 250);
   const normalizedScore = typeof score === 'number' && Number.isFinite(score) ? Math.max(0, Math.min(100, Math.round(score))) : null;
 
-  // Record to completed_lessons
   if (supabaseServer) {
     await supabaseServer.from('completed_lessons').insert({
       user_id: identity.userId,
@@ -58,7 +56,6 @@ export async function lessonCompleteHandler(req: Request, res: Response) {
     });
   }
 
-  // Record activity (don't double-count XP in profile - activity tracks for calendar)
   try {
     await recordActivity(identity.userId, {
       minutes: 5,
@@ -100,7 +97,6 @@ export async function progressHandler(req: Request, res: Response) {
     xpByLanguage[c.language] = (xpByLanguage[c.language] || 0) + (c.xp_awarded || 0);
   }
 
-  // Get streak from activity
   let streakDays = 0;
   try {
     const { getActivitySummary } = await import('./learnerActivity');
