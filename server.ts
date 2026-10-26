@@ -13,6 +13,12 @@ import {
   isSupabaseServerConfigured,
 } from './server/supabaseServer';
 import { getActivitySummary, recordActivity } from './server/learnerActivity';
+import { buildSafeLearnerProfile, parseClientActivityIncrement } from './server/learnerSecurity';
+import {
+  claimCertificateHandler,
+  lessonCompleteHandler,
+  progressHandler,
+} from './server/lessonComplete';
 import { adminRouter } from './admin/api/adminRoutes';
 import {
   AGENT_IDS,
@@ -219,44 +225,42 @@ app.get('/api/health', (_req: Request, res: Response) => {
   });
 });
 
-// Mirror learner progress to Supabase so the Admin backend sees real activity.
+// Mirror the safe part of a learner's profile to Supabase so the Admin backend
+// sees a real roster. Authoritative progress fields are never accepted here:
+// the authenticated token owns the row id/email, and XP, hearts, streak,
+// badges, role and account status stay server-owned.
 app.post('/api/learner/sync', async (req: Request, res: Response) => {
-  const {
-    id,
-    name,
-    email,
-    role,
-    targetDialect,
-    xp,
-    streakDays,
-    hearts,
-    todayMinutes,
-    dailyGoalMinutes,
-    speechScoreAverage,
-    vocabularyMastered,
-    status,
-    lastActive,
-  } = req.body || {};
+  const identity = await resolveIdentity(req);
+  if (!requireVerifiedUser(identity, res)) return;
 
-  if (!id || !name) {
-    return res.status(400).json({ error: 'id and name are required' });
+  const parsed = buildSafeLearnerProfile(req.body, {
+    userId: identity.userId,
+    email: identity.email,
+  });
+  if (!parsed.ok) {
+    return res.status(400).json({ error: parsed.error });
+  }
+
+  // Streak/minutes are read back from the server-owned activity table. Even if
+  // the client sends forged todayMinutes/streakDays, they are ignored.
+  let activity: Awaited<ReturnType<typeof getActivitySummary>> | null = null;
+  try {
+    activity = await getActivitySummary(identity.userId, {
+      goalMinutes: parsed.profile.dailyGoalMinutes,
+    });
+  } catch {
+    // Profile sync should still succeed when the activity table is empty or
+    // temporarily unavailable; existing authoritative columns are preserved.
   }
 
   const synced = await upsertLearnerAccount({
-    id,
-    name,
-    email,
-    role,
-    targetDialect,
-    xp,
-    streakDays,
-    hearts,
-    todayMinutes,
-    dailyGoalMinutes,
-    speechScoreAverage,
-    vocabularyMastered,
-    status,
-    lastActive,
+    id: identity.userId,
+    name: parsed.profile.name,
+    email: parsed.profile.email,
+    targetDialect: parsed.profile.targetDialect,
+    dailyGoalMinutes: parsed.profile.dailyGoalMinutes,
+    todayMinutes: activity?.todayMinutes,
+    streakDays: activity?.streakDays,
   });
 
   res.json({ success: synced, supabaseConfigured: isSupabaseServerConfigured });
@@ -267,9 +271,7 @@ app.post('/api/learner/sync', async (req: Request, res: Response) => {
 // ----------------------------------------------------------------------------
 app.get('/api/learner/activity', async (req: Request, res: Response) => {
   const identity = await resolveIdentity(req);
-  if (!identity.userId) {
-    return res.status(401).json({ error: 'Sign in required', code: 'UNAUTHENTICATED' });
-  }
+  if (!requireVerifiedUser(identity, res)) return;
 
   try {
     const summary = await getActivitySummary(identity.userId, {
@@ -283,9 +285,7 @@ app.get('/api/learner/activity', async (req: Request, res: Response) => {
 
 app.post('/api/learner/activity', async (req: Request, res: Response) => {
   const identity = await resolveIdentity(req);
-  if (!identity.userId) {
-    return res.status(401).json({ error: 'Sign in required', code: 'UNAUTHENTICATED' });
-  }
+  if (!requireVerifiedUser(identity, res)) return;
 
   const limit = checkRateLimit(`learner-activity:${identity.userId}`, 60);
   if (!limit.ok) {
@@ -296,24 +296,46 @@ app.post('/api/learner/activity', async (req: Request, res: Response) => {
   }
 
   // The server decides the practice date (Asia/Manila) so clients cannot
-  // backfill streaks or claim future days.
-  const { minutes, xp, lessons, goalMinutes } = req.body || {};
-  const numeric = [minutes, xp, lessons, goalMinutes].filter((value) => value !== undefined);
-  if (numeric.some((value) => !Number.isFinite(Number(value)) || Number(value) < 0)) {
-    return res.status(400).json({ error: 'minutes, xp, lessons and goalMinutes must be non-negative numbers' });
-  }
-
+  // backfill streaks or claim future days. XP and lesson counts are discarded:
+  // only server-side completion/activity code may award them.
+  const increment = parseClientActivityIncrement(req.body);
   try {
     const summary = await recordActivity(identity.userId, {
-      minutes: Number(minutes) || 0,
-      xp: Number(xp) || 0,
-      lessons: Number(lessons) || 0,
-      goalMinutes: Number(goalMinutes) || undefined,
+      minutes: increment.minutes,
+      goalMinutes: increment.goalMinutes,
+      xp: 0,
+      lessons: 0,
     });
     return res.json(summary);
   } catch (error: any) {
     return res.status(500).json({ error: error?.message || 'Failed to record activity' });
   }
+});
+
+// ----------------------------------------------------------------------------
+// Server-owned graded progress: completed lessons, XP, badges, certificates.
+// The browser may submit a lesson id and a self-reported score; language, XP
+// and badge/certificate eligibility are derived server-side.
+// ----------------------------------------------------------------------------
+app.get('/api/learner/progress', (req: Request, res: Response) => {
+  progressHandler(req, res).catch((error) => {
+    console.error('[learner-progress] unhandled route error:', error);
+    if (!res.headersSent) res.status(500).json({ error: 'Could not load learner progress' });
+  });
+});
+import { adminResetPassword } from './server/adminResetPassword';
+app.post('/api/admin/reset-password', adminResetPassword);
+app.post('/api/learner/lesson-complete', (req: Request, res: Response) => {
+  lessonCompleteHandler(req, res).catch((error) => {
+    console.error('[lesson-complete] unhandled route error:', error);
+    if (!res.headersSent) res.status(500).json({ error: 'Could not save lesson completion' });
+  });
+});
+app.post('/api/learner/certificate/claim', (req: Request, res: Response) => {
+  claimCertificateHandler(req, res).catch((error) => {
+    console.error('[learner-certificate] unhandled route error:', error);
+    if (!res.headersSent) res.status(500).json({ error: 'Could not issue certificate' });
+  });
 });
 
 // ----------------------------------------------------------------------------
@@ -365,7 +387,7 @@ function normalizeCoachReply(parsed: CoachReplyPayload) {
 function requireVerifiedUser(
   identity: Awaited<ReturnType<typeof resolveIdentity>>,
   res: Response
-): boolean {
+): identity is Awaited<ReturnType<typeof resolveIdentity>> & { userId: string; verified: true } {
   if (identity.verified && identity.userId) return true;
   res.status(401).json({ error: 'Sign in required', code: 'UNAUTHENTICATED' });
   return false;
@@ -1072,9 +1094,7 @@ app.post('/api/sulti/stt', async (req: Request, res: Response) => {
 
 app.get('/api/sulti/wallet', async (req: Request, res: Response) => {
   const identity = await resolveIdentity(req);
-  if (!identity.userId) {
-    return res.status(401).json({ error: 'Sign in required', code: 'UNAUTHENTICATED' });
-  }
+  if (!requireVerifiedUser(identity, res)) return;
   try {
     const summary = await getWalletSummary(identity.userId);
     return res.json(summary);
@@ -1085,7 +1105,7 @@ app.get('/api/sulti/wallet', async (req: Request, res: Response) => {
 
 app.get('/api/sulti/tokens/requests', async (req: Request, res: Response) => {
   const identity = await resolveIdentity(req);
-  if (!identity.userId) return res.status(401).json({ error: 'Sign in required' });
+  if (!requireVerifiedUser(identity, res)) return;
   try {
     return res.json({ requests: await listUpgradeRequests(identity.userId) });
   } catch (error: any) {
@@ -1095,7 +1115,7 @@ app.get('/api/sulti/tokens/requests', async (req: Request, res: Response) => {
 
 app.post('/api/sulti/tokens/request', async (req: Request, res: Response) => {
   const identity = await resolveIdentity(req);
-  if (!identity.userId) return res.status(401).json({ error: 'Sign in required' });
+  if (!requireVerifiedUser(identity, res)) return;
 
   const {
     planId,
@@ -1903,3 +1923,4 @@ server.listen(PORT, '0.0.0.0', () => {
 });
 
 // ----------------------------------------------------------------------------
+
