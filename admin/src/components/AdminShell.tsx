@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useRouter, usePathname } from 'next/navigation';
-import { useCallback, useState, useSyncExternalStore } from 'react';
+import { useCallback, useEffect, useState, useSyncExternalStore } from 'react';
 import type { ReactNode, SVGProps } from 'react';
 import { adminSession, useSession } from '@/lib/session';
 import { useToast } from './Toast';
@@ -27,6 +27,7 @@ const nav: { href: string; label: string; icon: Icon }[] = [
   { href: '/admin/lessons', label: 'Lessons', icon: BookIcon },
   { href: '/admin/community', label: 'Community', icon: ChatIcon },
   { href: '/admin/ai', label: 'AI Usage', icon: SparkIcon },
+  { href: '/admin/ai/tokens', label: 'AI Tokens', icon: CoinsIcon },
   { href: '/admin/xp', label: 'XP & Rewards', icon: BoltIcon },
   { href: '/admin/feedback', label: 'Feedback', icon: InboxIcon },
   { href: '/admin/preservation', label: 'Preservation', icon: ArchiveIcon },
@@ -45,6 +46,22 @@ export default function AdminShell({ children }: { children: ReactNode }) {
   // The drawer is dismissed by its own links and the backdrop rather than by a
   // route-watching effect, so a tap closes it in the same tick as navigation.
   const closeMenu = useCallback(() => setMenuOpen(false), []);
+
+  // While the drawer is open: lock background scroll, close on Escape, and
+  // restore the previous overflow value on unmount/close.
+  useEffect(() => {
+    if (!menuOpen) return;
+    const previousOverflow = document.body.style.overflow;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setMenuOpen(false);
+    };
+    document.body.style.overflow = 'hidden';
+    window.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener('keydown', onKeyDown);
+    };
+  }, [menuOpen]);
 
   async function handleSignOut() {
     await adminSession.signOut();
@@ -197,6 +214,7 @@ export default function AdminShell({ children }: { children: ReactNode }) {
               onClick={() => setMenuOpen((v) => !v)}
               aria-label="Toggle menu"
               aria-expanded={menuOpen}
+              aria-controls="admin-mobile-nav"
               className={iconBtn}
             >
               <svg
@@ -219,28 +237,83 @@ export default function AdminShell({ children }: { children: ReactNode }) {
         </div>
       </div>
 
+      {/* Mobile navigation: a fixed slide-over drawer, never an inline list.
+          The backdrop isolates it from the dashboard so long nav lists cannot
+          stack on top of page cards. */}
       {menuOpen && (
-        <div className="anim-pop sticky top-[76px] z-40 px-3 pt-3 lg:hidden">
-          <div className="rounded-card glass-1 glass-sheen glass-shadow px-6 py-4">
-            {renderNav(closeMenu)}
-            <Link
-              href="/admin/settings"
-              onClick={closeMenu}
-              className="press mt-1 flex items-center gap-2.5 rounded-control px-3 py-2.5 text-sm font-medium text-ink-soft hover:bg-surface-2 hover:text-ink"
-            >
-              <CogIcon className="h-4 w-4 shrink-0" />
-              Settings
-            </Link>
-            <button
-              type="button"
-              onClick={() => {
-                closeMenu();
-                void handleSignOut();
-              }}
-              className="press mt-3 w-full rounded-control border border-line px-3 py-2.5 text-sm font-semibold text-ink-soft hover:bg-surface-2"
-            >
-              Sign out
-            </button>
+        <div className="fixed inset-0 z-50 lg:hidden">
+          <button
+            type="button"
+            aria-label="Close navigation"
+            onClick={closeMenu}
+            className="anim-fade absolute inset-0 h-full w-full bg-black/60 backdrop-blur-sm"
+          />
+          <div
+            role="dialog"
+            id="admin-mobile-nav"
+            aria-modal="true"
+            aria-label="Admin navigation"
+            className="anim-drawer absolute inset-y-0 left-0 flex w-[86vw] max-w-xs flex-col overflow-y-auto rounded-r-card glass-1 glass-sheen glass-shadow px-5 pt-4 pb-5"
+          >
+            <div className="flex items-center justify-between gap-3 border-b border-line pb-4">
+              <div className="flex min-w-0 items-center gap-2.5">
+                <SultiMark size="sm" />
+                <p className="truncate text-sm font-semibold tracking-tight text-ink">
+                  SultiAI Admin
+                </p>
+              </div>
+              <button type="button" onClick={closeMenu} aria-label="Close menu" className={iconBtn}>
+                <svg
+                  width="18"
+                  height="18"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                >
+                  <path d="M6 6l12 12M18 6L6 18" />
+                </svg>
+              </button>
+            </div>
+
+            <nav className="flex-1 py-4">{renderNav(closeMenu)}</nav>
+
+            <div className="space-y-3 border-t border-line pt-4">
+              <Link
+                href="/admin/settings"
+                onClick={closeMenu}
+                className={`press flex items-center gap-2.5 rounded-control px-3 py-2.5 text-sm font-medium ${
+                  pathname.startsWith('/admin/settings')
+                    ? 'text-brand-ink'
+                    : 'text-ink-soft hover:bg-surface-2 hover:text-ink'
+                }`}
+              >
+                <CogIcon className="h-4 w-4 shrink-0" />
+                Settings
+              </Link>
+
+              <ThemeToggle className="w-full justify-center" />
+
+              <div className="flex items-center gap-2.5 rounded-control px-1.5 py-1.5">
+                <Avatar name={session.name} />
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium text-ink">{session.name}</p>
+                  <p className="truncate text-[11px] text-ink-faint">Administrator</p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  closeMenu();
+                  void handleSignOut();
+                }}
+                className="press w-full rounded-control border border-line px-3 py-2.5 text-sm font-semibold text-ink-soft hover:bg-surface-2"
+              >
+                Sign out
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -328,6 +401,16 @@ function BoltIcon(props: SVGProps<SVGSVGElement>) {
   return (
     <svg {...base(props)}>
       <path d="M13 2L4.5 13.5H11l-1 8.5 8.5-11.5H12z" />
+    </svg>
+  );
+}
+
+function CoinsIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg {...base(props)}>
+      <ellipse cx="12" cy="6" rx="7" ry="3" />
+      <path d="M5 6v6c0 1.66 3.13 3 7 3s7-1.34 7-3V6" />
+      <path d="M5 12v6c0 1.66 3.13 3 7 3s7-1.34 7-3v-6" />
     </svg>
   );
 }

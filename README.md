@@ -1113,6 +1113,11 @@ XAI_VOICE=eve
 
 Only configure external AI keys for features that require them.
 
+> [!IMPORTANT]
+> `.env` files are git-ignored. Never commit real keys, and never use `VITE_` or
+> `EXPO_PUBLIC_` for a secret. See [docs/SECRETS.md](docs/SECRETS.md) for the
+> rotation checklist and the `npm run check:secrets` scanner.
+
 ---
 
 # ⚙️ Backend

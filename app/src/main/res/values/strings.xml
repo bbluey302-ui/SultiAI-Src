@@ -1,0 +1,21 @@
+<resources>
+    <string name="app_name">SultiAI - Bisaya Language & Communication Hub</string>
+    <string name="app_short_name">SultiAI</string>
+    <string name="tagline">Bisaya Language &amp; Communication Hub</string>
+    <string name="nav_home">Home</string>
+    <string name="nav_learn">Learn</string>
+    <string name="nav_sulti">Sulti AI</string>
+    <string name="nav_community">Community</string>
+    <string name="nav_profile">Profile</string>
+    <string name="capstone_audit">Capstone Audit</string>
+    <string name="start_lesson">Start Lesson</string>
+    <string name="continue_learning">Continue Learning</string>
+    <string name="daily_mission">Daily Mission</string>
+    <string name="practice_now">Practice Now</string>
+    <string name="send">Send</string>
+    <string name="record">Record Voice</string>
+    <string name="listen">Listen</string>
+    <string name="check_answer">Check Answer</string>
+    <string name="next">Next</string>
+    <string name="finish">Finish Lesson</string>
+</resources>

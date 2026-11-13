@@ -162,8 +162,17 @@ CREATE TRIGGER on_auth_user_updated
 -- SELECT/UPDATE on the owner's own row, which is exactly that query, so this
 -- is a no-op safety net in case the policy was ever dropped.
 DROP POLICY IF EXISTS "Users can view own profile" ON public.users;
-CREATE POLICY "Users can view own profile" ON public.users
-  FOR SELECT USING (supabase_id = auth.uid()::text OR is_admin());
+DO $_sguard_$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'users' AND column_name = 'user_id' AND data_type = 'uuid'
+  ) THEN
+    EXECUTE $_spol$CREATE POLICY "Users can view own profile" ON public.users
+  FOR SELECT USING (supabase_id = auth.uid()::text OR is_admin())$_spol$;
+  END IF;
+END
+$_sguard_$;
 
 -- ============================================
 -- 5. Leaderboard needs a cross-user read that RLS currently forbids
@@ -282,18 +291,45 @@ NOTIFY pgrst, 'reload schema';
 -- XP credits: `awardXp` in src/services/api.js writes the xp_logs row that makes
 -- a reward idempotent. Without this, daily rewards and challenges cannot pay.
 DROP POLICY IF EXISTS "Users can log own XP" ON public.xp_logs;
-CREATE POLICY "Users can log own XP" ON public.xp_logs
-  FOR INSERT WITH CHECK (user_id = get_user_id());
+DO $_sguard_$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'xp_logs' AND column_name = 'user_id' AND data_type = 'uuid'
+  ) THEN
+    EXECUTE $_spol$CREATE POLICY "Users can log own XP" ON public.xp_logs
+  FOR INSERT WITH CHECK (user_id = get_user_id())$_spol$;
+  END IF;
+END
+$_sguard_$;
 
 -- Achievements and badges are unlocked locally by GameContext and mirrored to
 -- the DB so they survive a reinstall.
 DROP POLICY IF EXISTS "Users can unlock own achievements" ON public.user_achievements;
-CREATE POLICY "Users can unlock own achievements" ON public.user_achievements
-  FOR INSERT WITH CHECK (user_id = get_user_id());
+DO $_sguard_$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'user_achievements' AND column_name = 'user_id' AND data_type = 'uuid'
+  ) THEN
+    EXECUTE $_spol$CREATE POLICY "Users can unlock own achievements" ON public.user_achievements
+  FOR INSERT WITH CHECK (user_id = get_user_id())$_spol$;
+  END IF;
+END
+$_sguard_$;
 
 DROP POLICY IF EXISTS "Users can unlock own badges" ON public.user_badges;
-CREATE POLICY "Users can unlock own badges" ON public.user_badges
-  FOR INSERT WITH CHECK (user_id = get_user_id());
+DO $_sguard_$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'user_badges' AND column_name = 'user_id' AND data_type = 'uuid'
+  ) THEN
+    EXECUTE $_spol$CREATE POLICY "Users can unlock own badges" ON public.user_badges
+  FOR INSERT WITH CHECK (user_id = get_user_id())$_spol$;
+  END IF;
+END
+$_sguard_$;
 
 -- `api.checkAchievements` mirrors locally-earned achievements with an
 -- INSERT ... ON CONFLICT DO NOTHING, and PostgREST's `on_conflict` needs a

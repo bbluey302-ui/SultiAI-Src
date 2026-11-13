@@ -31,7 +31,7 @@ export default function AdminAuditLogsPage() {
   const [page, setPage] = useState(1);
   const perPage = 20;
 
-  const filters = { search, resourceType, actorId: 'all' as const };
+  const filters = { search, resourceType, actorId: 'all' as const, actorKind: 'all' as const };
   const { data, loading, error, reload } = useAsync(
     () => api.listAuditLogs(filters, page, perPage),
     [search, resourceType, page]

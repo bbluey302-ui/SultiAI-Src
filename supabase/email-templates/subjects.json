@@ -1,0 +1,9 @@
+{
+  "confirmation": "Confirm your SultiAI email address",
+  "recovery": "Reset your SultiAI password",
+  "invite": "You're invited to SultiAI",
+  "magic_link": "Your SultiAI sign-in link",
+  "email_change": "Confirm your new SultiAI email",
+  "reauthentication": "{{ .Token }} is your SultiAI verification code",
+  "password_changed_notification": "Your SultiAI password was changed"
+}

@@ -1,0 +1,316 @@
+@import "tailwindcss";
+
+@variant dark (&:where(.dark, .dark *));
+
+:root {
+  color-scheme: light;
+  --bg-app: #F7F9FA;
+  --bg-surface: #FFFFFF;
+  --bg-surface-elevated: #E8F8F6;
+  --text-primary: #17252D;
+  --text-secondary: #5C6C77;
+  --border-subtle: #DCE7E8;
+  --accent-primary: #007C72;
+  --accent-secondary: #00A99B;
+  --accent-teal: #007C72;
+  --accent-soft: #E8F8F6;
+  --on-brand: #FFFFFF;
+  --shadow-soft-value: 0 1px 2px rgba(16, 42, 51, 0.04), 0 8px 24px -16px rgba(16, 42, 51, 0.18);
+}
+
+.dark {
+  color-scheme: dark;
+  --bg-app: #08121D;
+  --bg-surface: #101E2A;
+  --bg-surface-elevated: #102A33;
+  --text-primary: #F4F7FA;
+  --text-secondary: #A8B6C4;
+  --border-subtle: rgba(168, 182, 196, 0.16);
+  --accent-primary: #00B8A9;
+  --accent-secondary: #14C9B0;
+  --accent-teal: #00B8A9;
+  --accent-soft: rgba(0, 184, 169, 0.12);
+  --on-brand: #04201E;
+  --shadow-soft-value: 0 4px 24px -12px rgba(0, 0, 0, 0.5);
+}
+
+@theme inline {
+  --color-app: var(--bg-app);
+  --color-surface: var(--bg-surface);
+  --color-elevated: var(--bg-surface-elevated);
+  --color-ink: var(--text-primary);
+  --color-muted: var(--text-secondary);
+  --color-line: var(--border-subtle);
+  --color-brand: var(--accent-primary);
+  --color-brand-strong: var(--accent-secondary);
+  --color-brand-soft: var(--accent-soft);
+  --color-on-brand: var(--on-brand);
+  --shadow-soft: var(--shadow-soft-value);
+}
+
+@layer base {
+  * {
+    -webkit-tap-highlight-color: transparent;
+  }
+  body {
+    font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+    background-color: var(--bg-app);
+    color: var(--text-primary);
+    transition: background-color 0.2s ease, color 0.2s ease;
+  }
+  h1, h2, h3, .font-display {
+    font-family: 'Outfit', 'Plus Jakarta Sans', system-ui, sans-serif;
+  }
+}
+
+/* 3D Duolingo / Speak Style Tactile Buttons */
+.btn-3d-teal {
+  box-shadow: 0 4px 0 #0f766e;
+  transition: all 0.12s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.btn-3d-teal:active {
+  transform: translateY(3px);
+  box-shadow: 0 1px 0 #0f766e;
+}
+
+/* Glassmorphic Touch Animation & Surface Styles */
+.glass-touch {
+  position: relative;
+  overflow: hidden;
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), 
+              box-shadow 0.2s ease, 
+              border-color 0.2s ease, 
+              background-color 0.2s ease;
+}
+
+.glass-touch::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.35) 0%, rgba(255, 255, 255, 0.05) 40%, rgba(20, 184, 166, 0.2) 100%);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.25s ease;
+  border-radius: inherit;
+}
+
+.dark .glass-touch::before {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.18) 0%, rgba(255, 255, 255, 0.02) 40%, rgba(20, 184, 166, 0.3) 100%);
+}
+
+.glass-touch:hover::before {
+  opacity: 0.6;
+}
+
+.glass-touch:active {
+  transform: scale(0.975);
+}
+
+.glass-touch:active::before {
+  opacity: 1;
+}
+
+/* Subtle glass reflection shimmer on touch */
+@keyframes glass-shimmer {
+  0% { transform: translateX(-150%) rotate(25deg); }
+  100% { transform: translateX(250%) rotate(25deg); }
+}
+
+.glass-shimmer-effect:active::after {
+  content: '';
+  position: absolute;
+  top: -50%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  background: linear-gradient(
+    90deg, 
+    transparent 0%, 
+    rgba(255, 255, 255, 0.25) 50%, 
+    transparent 100%
+  );
+  pointer-events: none;
+  animation: glass-shimmer 0.6s ease-out;
+}
+
+.glass-card-surface {
+  background: rgba(255, 255, 255, 0.9);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(229, 231, 235, 0.9);
+  box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.04);
+}
+
+.dark .glass-card-surface {
+  background: rgba(17, 34, 45, 0.85);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.btn-3d-emerald {
+  box-shadow: 0 4px 0 #047857;
+  transition: all 0.12s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.btn-3d-emerald:active {
+  transform: translateY(3px);
+  box-shadow: 0 1px 0 #047857;
+}
+
+.btn-3d-rose {
+  box-shadow: 0 4px 0 #be123c;
+  transition: all 0.12s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.btn-3d-rose:active {
+  transform: translateY(3px);
+  box-shadow: 0 1px 0 #be123c;
+}
+
+.btn-3d-amber {
+  box-shadow: 0 4px 0 #b45309;
+  transition: all 0.12s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.btn-3d-amber:active {
+  transform: translateY(3px);
+  box-shadow: 0 1px 0 #b45309;
+}
+
+.btn-3d-sky {
+  box-shadow: 0 4px 0 #0284c7;
+  transition: all 0.12s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.btn-3d-sky:active {
+  transform: translateY(3px);
+  box-shadow: 0 1px 0 #0284c7;
+}
+
+.btn-3d-white {
+  box-shadow: 0 3px 0 #cbd5e1;
+  transition: all 0.12s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.btn-3d-white:active {
+  transform: translateY(2px);
+  box-shadow: 0 1px 0 #cbd5e1;
+}
+
+.btn-3d-dark {
+  box-shadow: 0 4px 0 #1c1917;
+  transition: all 0.12s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.btn-3d-dark:active {
+  transform: translateY(3px);
+  box-shadow: 0 1px 0 #1c1917;
+}
+
+/* Pulsing radar ring for active lesson node */
+@keyframes radar-pulse {
+  0% {
+    transform: scale(0.95);
+    box-shadow: 0 0 0 0 rgba(20, 184, 166, 0.7);
+  }
+  70% {
+    transform: scale(1);
+    box-shadow: 0 0 0 12px rgba(20, 184, 166, 0);
+  }
+  100% {
+    transform: scale(0.95);
+    box-shadow: 0 0 0 0 rgba(20, 184, 166, 0);
+  }
+}
+
+.animate-radar {
+  animation: radar-pulse 2s infinite cubic-bezier(0.4, 0, 0.6, 1);
+}
+
+@keyframes heart-beat {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.18); }
+}
+
+.animate-heart {
+  animation: heart-beat 1.2s infinite ease-in-out;
+}
+
+/* Audio Waveform animation */
+@keyframes soundwave {
+  0%, 100% { height: 6px; }
+  50% { height: 28px; }
+}
+
+.wave-bar-1 { animation: soundwave 0.8s ease-in-out infinite 0.1s; }
+.wave-bar-2 { animation: soundwave 0.8s ease-in-out infinite 0.25s; }
+.wave-bar-3 { animation: soundwave 0.8s ease-in-out infinite 0.4s; }
+.wave-bar-4 { animation: soundwave 0.8s ease-in-out infinite 0.15s; }
+.wave-bar-5 { animation: soundwave 0.8s ease-in-out infinite 0.35s; }
+
+/* Custom smooth scrollbar */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.35);
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(100, 116, 139, 0.55);
+}
+
+
+/* SultiAI UI polish: friendly wave + clean horizontal chip scrollers */
+@keyframes float-soft {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-4px); }
+}
+.animate-float {
+  animation: float-soft 3.4s ease-in-out infinite;
+}
+@keyframes wave-hand {
+  0%, 60%, 100% { transform: rotate(0deg); }
+  10%, 30% { transform: rotate(14deg); }
+  20% { transform: rotate(-8deg); }
+  40% { transform: rotate(-4deg); }
+}
+.animate-wave {
+  animation: wave-hand 2.2s ease-in-out infinite;
+  transform-origin: 70% 70%;
+}
+.scrollbar-none {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+
+/* Subtle dashboard entrance — keeps the experience calm and premium */
+@keyframes dash-enter {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.dash-enter {
+  animation: dash-enter 0.28s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dash-enter,
+  .animate-wave,
+  .animate-float,
+  .animate-heart,
+  .animate-radar,
+  [class*='wave-bar-'] {
+    animation: none !important;
+  }
+}

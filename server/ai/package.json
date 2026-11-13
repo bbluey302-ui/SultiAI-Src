@@ -1,0 +1,4 @@
+{
+  "//": "Scoped ESM marker: the root app is ESM but ../package.json is CommonJS (legacy server). Without this, esbuild/tsx compiles the gateway to CJS and Node's ESM loader cannot see its named exports.",
+  "type": "module"
+}

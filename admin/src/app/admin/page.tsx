@@ -139,6 +139,8 @@ export default function AdminDashboardPage() {
     groq: 'unknown',
     whisper: 'unknown',
     storage: 'unknown',
+    latencyMs: null,
+    lastSuccessfulCheck: null,
     lastChecked: new Date().toISOString(),
   };
   const attention = brief(healthData, stats);

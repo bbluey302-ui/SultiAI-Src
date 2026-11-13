@@ -19,8 +19,17 @@
 DROP POLICY IF EXISTS "Authenticated users can read platform settings"
   ON public.platform_settings;
 
-CREATE POLICY "Admins can read platform settings"
+DO $_sguard_$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'platform_settings' AND column_name = 'user_id' AND data_type = 'uuid'
+  ) THEN
+    EXECUTE $_spol$CREATE POLICY "Admins can read platform settings"
   ON public.platform_settings
-  FOR SELECT USING (is_admin());
+  FOR SELECT USING (is_admin())$_spol$;
+  END IF;
+END
+$_sguard_$;
 
 NOTIFY pgrst, 'reload schema';

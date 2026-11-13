@@ -4,12 +4,12 @@
 --   DROP TABLE IF EXISTS public.completed_lessons;
 --   ALTER TABLE public.learner_profiles DROP COLUMN IF EXISTS target_language;
 
-DO 
+DO $$
 BEGIN
   IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema='public' AND table_name='learner_profiles') THEN
     ALTER TABLE public.learner_profiles ADD COLUMN IF NOT EXISTS target_language text DEFAULT 'cebuano';
   END IF;
-END ;
+END $$;
 
 CREATE TABLE IF NOT EXISTS public.completed_lessons (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),

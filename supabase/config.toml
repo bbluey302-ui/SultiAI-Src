@@ -162,7 +162,7 @@ enabled = true
 #
 # Expo Go's scheme is included because the app authenticates from Expo Go during
 # development; drop it when distributing a standalone build.
-site_url = "http://127.0.0.1:3000"
+site_url = "http://localhost:3000"
 # The public URL that Auth serves on. Defaults to the API external URL with `/auth/v1` appended.
 # external_url = ""
 # A list of *exact* URLs that auth providers are permitted to redirect to post authentication.
@@ -173,6 +173,9 @@ site_url = "http://127.0.0.1:3000"
 additional_redirect_urls = [
   "https://127.0.0.1:3000",
   "http://localhost:3000",
+  "http://localhost:3000/auth/callback",
+  "http://127.0.0.1:3000",
+  "http://127.0.0.1:3000/auth/callback",
   "sultiai://auth",
   "exp://127.0.0.1:8081",
 ]
@@ -264,14 +267,15 @@ otp_length = 6
 otp_expiry = 3600
 
 # Use a production-ready SMTP server
-# [auth.email.smtp]
+[auth.email.smtp]
 # enabled = true
-# host = "smtp.sendgrid.net"
-# port = 587
-# user = "apikey"
-# pass = "env(SENDGRID_API_KEY)"
+# (When using Resend - replace host/user/pass with your provider)
+# host = "smtp.resend.com"
+# port = 465
+# user = "resend"
+# pass = "env(RESEND_API_KEY)"
 # admin_email = "admin@email.com"
-# sender_name = "Admin"
+# sender_name = "SultiAI"
 
 # Uncomment to customize email template
 # [auth.email.template.invite]

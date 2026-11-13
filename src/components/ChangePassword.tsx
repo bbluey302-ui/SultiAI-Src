@@ -19,6 +19,7 @@ export const ChangePassword: React.FC<{ onDone?: () => void }> = ({ onDone }) =>
     setStatus('loading');
     try {
       const { supabase } = await import('../services/supabaseClient');
+      if (!supabase) throw new Error('Authentication is not configured');
       const { error } = await supabase.auth.updateUser({ password });
       if (error) throw error;
       setStatus('done'); setMsg('Password updated');

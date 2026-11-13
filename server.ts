@@ -11,6 +11,7 @@ import {
   writeAuditLog,
   upsertLearnerAccount,
   isSupabaseServerConfigured,
+  supabaseServer,
 } from './server/supabaseServer';
 import { getActivitySummary, recordActivity } from './server/learnerActivity';
 import { buildSafeLearnerProfile, parseClientActivityIncrement } from './server/learnerSecurity';
@@ -37,6 +38,13 @@ import {
   synthesizeSpeech,
   transcribeAudio,
 } from './server/ai';
+import {
+  DEFAULT_CONFIDENCE_THRESHOLD,
+  analyzeForChat,
+  analyzeLearnerText,
+  getNlpStatus,
+  warmLocalBert,
+} from './server/nlp';
 
 dotenv.config();
 // The legacy backend kept its provider keys in `server/.env`. Load it as a
@@ -69,81 +77,42 @@ if (apiKey) {
   });
 }
 
-// BERT Intent Classification Rule-Engine & Simulation
-function runBertNlpInference(text: string) {
-  const startTime = Date.now();
-  const lower = text.toLowerCase().trim();
+// ---------------------------------------------------------------------------
+// NLP confidence threshold
+// ---------------------------------------------------------------------------
+// The admin console owns `system_config.bert_confidence_threshold`; an env var
+// can override it for a local run. Cache for a minute so chat turns do not hit
+// the database on every message.
+const BERT_THRESHOLD_TTL_MS = 60_000;
+let bertThresholdCache = { value: DEFAULT_CONFIDENCE_THRESHOLD, at: 0 };
 
-  let predictedIntent = 'casual_social';
-  let intentConfidence = 0.91;
-  let detectedLanguage = 'Bisaya (Cebuano)';
-  let languageConfidence = 0.95;
-  let sentiment: 'Polite' | 'Casual' | 'Inquiring' | 'Hesitant' | 'Formal' = 'Casual';
-  let sentimentScore = 0.88;
-
-  // Intent patterns
-  if (/buntag|hapon|gabii|udto|kumusta|halo|hi|musta/.test(lower)) {
-    predictedIntent = 'greeting_inquiry';
-    intentConfidence = 0.98;
-    sentiment = 'Polite';
-    sentimentScore = 0.95;
-  } else if (/plete|lugar|para|bayad|sukli|jeep|multicab|eskina|kanto/.test(lower)) {
-    predictedIntent = 'fare_navigation_jeepney';
-    intentConfidence = 0.97;
-    sentiment = 'Polite';
-    sentimentScore = 0.92;
-  } else if (/tagpila|pila|hangyo|mahal|barato|palit|kilo|isda|mangga/.test(lower)) {
-    predictedIntent = 'price_bargaining';
-    intentConfidence = 0.96;
-    sentiment = 'Inquiring';
-    sentimentScore = 0.90;
-  } else if (/salamat|daghang|pasalamat/.test(lower)) {
-    predictedIntent = 'courtesy_gratitude';
-    intentConfidence = 0.99;
-    sentiment = 'Polite';
-    sentimentScore = 0.97;
-  } else if (/asa|diin|padulong|distansya|layo|duol/.test(lower)) {
-    predictedIntent = 'directional_inquiry';
-    intentConfidence = 0.95;
-    sentiment = 'Inquiring';
-    sentimentScore = 0.91;
-  } else if (/kaon|lami|sud-an|kan-anan|tubig|inom/.test(lower)) {
-    predictedIntent = 'food_ordering';
-    intentConfidence = 0.94;
-    sentiment = 'Casual';
-    sentimentScore = 0.89;
-  } else if (/tudlo|unsaon|pasabot|tudloi/.test(lower)) {
-    predictedIntent = 'pedagogical_clarification';
-    intentConfidence = 0.96;
-    sentiment = 'Hesitant';
-    sentimentScore = 0.85;
+async function getBertConfidenceThreshold(): Promise<number> {
+  if (Date.now() - bertThresholdCache.at < BERT_THRESHOLD_TTL_MS) {
+    return bertThresholdCache.value;
   }
 
-  // Dialect markers
-  if (lower.includes('bitaw') || lower.includes('gud') || lower.includes('karon') || lower.includes('gani') || lower.includes('mao ba')) {
-    detectedLanguage = 'Davao Bisaya';
-    languageConfidence = 0.98;
+  let value = Number(process.env.BERT_CONFIDENCE_THRESHOLD);
+  if (!Number.isFinite(value) || value <= 0 || value > 1) {
+    value = DEFAULT_CONFIDENCE_THRESHOLD;
+    if (supabaseServer) {
+      try {
+        const { data } = await supabaseServer
+          .from('system_config')
+          .select('bert_confidence_threshold')
+          .eq('id', 'global')
+          .maybeSingle();
+        const configured = Number(data?.bert_confidence_threshold);
+        if (Number.isFinite(configured) && configured > 0 && configured <= 1) {
+          value = configured;
+        }
+      } catch {
+        // Keep the default when the admin table is unavailable.
+      }
+    }
   }
 
-  const words = text.split(/\s+/).filter(Boolean);
-  const keyTokens = words.slice(0, 8).map((word, idx) => ({
-    token: word,
-    weight: Math.min(0.98, Math.max(0.42, 0.95 - idx * 0.08)),
-  }));
-
-  const latencyMs = Math.floor(Math.random() * 12) + 8;
-
-  return {
-    predictedIntent,
-    intentConfidence,
-    detectedLanguage,
-    languageConfidence,
-    sentiment,
-    sentimentScore,
-    keyTokens,
-    bertModelRef: 'mBERT-cased-finetuned-cebuano-v2.1',
-    latencyMs,
-  };
+  bertThresholdCache = { value, at: Date.now() };
+  return value;
 }
 
 // Whisper Speech-to-Text & Word Error Rate (WER) Evaluation
@@ -324,7 +293,9 @@ app.get('/api/learner/progress', (req: Request, res: Response) => {
   });
 });
 import { adminResetPassword } from './server/adminResetPassword';
-app.post('/api/admin/reset-password', adminResetPassword);
+// The handler is typed against the `@types/express` copy resolved from
+// `server/node_modules`; cast once so both copies agree (behaviour unchanged).
+app.post('/api/admin/reset-password', adminResetPassword as unknown as express.RequestHandler);
 app.post('/api/learner/lesson-complete', (req: Request, res: Response) => {
   lessonCompleteHandler(req, res).catch((error) => {
     console.error('[lesson-complete] unhandled route error:', error);
@@ -402,6 +373,8 @@ app.post('/api/sulti/chat', async (req: Request, res: Response) => {
     targetDialect = 'davao_bisaya', 
     userLevel = 'Beginner',
     agentId = 'jen',
+    agentName,
+    agentPersona,
     targetLanguage = 'cebuano' 
   } = req.body;
 
@@ -453,12 +426,27 @@ app.post('/api/sulti/chat', async (req: Request, res: Response) => {
     }
   };
 
-  const coachId = AGENT_IDS.includes(agentId as (typeof AGENT_IDS)[number])
-    ? (agentId as (typeof AGENT_IDS)[number])
-    : 'jen';
+  const isBuiltInAgent = AGENT_IDS.includes(agentId as (typeof AGENT_IDS)[number]);
+  const coachId = isBuiltInAgent ? (agentId as (typeof AGENT_IDS)[number]) : 'jen';
 
-  // Run BERT intent analysis immediately
-  const bertAnalysis = runBertNlpInference(message);
+  // Learner-created bots are stored on the client, so their persona arrives with
+  // the request. It only ever shapes this learner's own reply: cap it, strip
+  // control characters, and never let it replace the language rules below.
+  const customCoachName =
+    !isBuiltInAgent && typeof agentName === 'string'
+      ? agentName.replace(/[\u0000-\u001f]+/g, ' ').trim().slice(0, 60)
+      : '';
+  const customCoachPersona =
+    !isBuiltInAgent && typeof agentPersona === 'string'
+      ? agentPersona.replace(/[\u0000-\u001f]+/g, ' ').trim().slice(0, 700)
+      : '';
+
+  // Local ONNX BERT is tried first with a short timeout (BERT_CHAT_TIMEOUT_MS).
+  // If the model is still loading, the offline TF-IDF/rule result is used and the
+  // BERT warmup continues in the background; the next turn can use the encoder.
+  // Hosted encoders are not called here unless BERT_CHAT_REMOTE_FALLBACK=true.
+  const bertThreshold = await getBertConfidenceThreshold();
+  const bertAnalysis = await analyzeForChat(message, { threshold: bertThreshold });
   const lowerMsg = message.toLowerCase();
 
   logAuditEvent({
@@ -473,6 +461,10 @@ app.post('/api/sulti/chat', async (req: Request, res: Response) => {
       predictedIntent: bertAnalysis.predictedIntent,
       confidence: bertAnalysis.intentConfidence,
       dialect: bertAnalysis.detectedLanguage,
+      engine: bertAnalysis.engine,
+      source: bertAnalysis.source,
+      remoteModel: bertAnalysis.remoteModel,
+      classifierMethod: bertAnalysis.classifierMethod,
       targetDialect,
       agentId,
       targetLanguage,
@@ -587,6 +579,10 @@ Question: "${message}"`,
         coachPersonaDirective = `You are "Sulti AI Mika", a cheerful, supportive Filipino Coach. You specialize in Filipino/Tagalog expressions, vocabulary, grammar rules, polite markers (po and opo), and everyday Manila dialogue.`;
       }
 
+      if (!isBuiltInAgent && customCoachPersona) {
+        coachPersonaDirective = `You are "${customCoachName || 'a learner-created Sulti AI coach'}", a personalised Philippine language coach created by this learner. Persona and teaching style: ${customCoachPersona}`;
+      }
+
       const prompt = `
 ${coachPersonaDirective}
 
@@ -595,22 +591,32 @@ Linguistic Grounding & Authority:
 - Orthography, grammar, and vocabulary are grounded in authoritative Philippine sources: Akademyang Bisaya (English–Visayan Cebuano Dictionary) and Komisyon sa Wikang Filipino (KWF).
 - Maintain distinct linguistic integrity: do NOT mix Tagalog honorifics ("po/opo") into Bisaya conversations.
 - In Bisaya, politeness is expressed through warm vocal tone and markers like "palihog", "salamat", and friendly modal particles ("bitaw", "gud", "man", "lagi", "ba").
+- Bilingual coaching rule: ALWAYS give replyBisaya in ${targetLanguage || 'cebuano'}, then replyEnglish with its meaning, and list 2-4 important words/phrases in breakdown so a beginner understands the line. Do not answer in English only unless the target language is English.
 
 Learner Context:
 - Current learner level: ${userLevel} (non-native speaker / second language learner).
 - Selected dialect preference: ${targetDialect}.
 - Current situational scenario: ${scenario || 'General daily conversation and Philippine cultural practice'}.
 
+NLP signals (internal routing hints — NEVER mention these labels to the learner):
+- Predicted intent: ${bertAnalysis.predictedIntent} (${Math.round(bertAnalysis.intentConfidence * 100)}% confidence).
+- Detected language: ${bertAnalysis.detectedLanguage}; dialect: ${bertAnalysis.dialect}.
+- Key entities: ${bertAnalysis.entities.length ? bertAnalysis.entities.map((entity) => `${entity.type}=${entity.value}`).join(', ') : 'none'}.
+- If confidence is low, ask ONE short clarifying question before answering.
+- If the intent is pedagogical_clarification, explain the rule briefly in English, then give a natural ${targetLanguage || 'cebuano'} example.
+- If the intent is courtesy_gratitude or greeting_inquiry, answer warmly and offer the next practice step.
+- If the learner negated something, acknowledge the negation instead of ignoring it.
+
 User message: "${message}"
 
 Respond strictly in valid JSON matching this schema:
 {
   "content": "Rich response message with natural Markdown formatting, headings, bullet points or dialogue as appropriate",
-  "replyBisaya": "Authentic conversational reply in the target language (${targetLanguage})",
-  "replyEnglish": "Natural English translation or explanation",
+  "replyBisaya": "Authentic conversational reply ONLY in the target language (${targetLanguage}). Keep it to 1-2 natural sentences so a beginner can follow and reply.",
+  "replyEnglish": "REQUIRED. A faithful, natural English translation of replyBisaya. Never leave this empty, even when the target language is English.",
   "phoneticGuide": "Clear hyphenated syllable pronunciation guide",
   "breakdown": [
-    { "bisaya": "word", "english": "meaning", "pos": "noun/verb/particle" }
+    { "bisaya": "key target-language word or short phrase used in replyBisaya", "english": "its English meaning", "pos": "noun/verb/particle" }
   ],
   "culturalTip": "A 1-sentence cultural or etiquette tip grounded in customs or workplace practice",
   "suggestedReplies": [
@@ -1147,15 +1153,83 @@ app.post('/api/sulti/tokens/request', async (req: Request, res: Response) => {
   }
 });
 
-// BERT NLP Analysis Endpoint
-app.post('/api/sulti/bert-analyze', (req: Request, res: Response) => {
-  const { text } = req.body;
+// BERT / NLP analysis endpoint
+//
+// Requires a verified learner, rate limits, and caps the text length. `remote`
+// defaults to true so this diagnostics endpoint can exercise the hosted BERT /
+// transformer encoder, while normal chat turns stay on the offline fast path.
+app.post('/api/sulti/bert-analyze', async (req: Request, res: Response) => {
+  const identity = await resolveIdentity(req);
+  if (!requireVerifiedUser(identity, res)) return;
+
+  const { text, remote } = req.body || {};
   if (!text || typeof text !== 'string') {
     return res.status(400).json({ error: 'Text string is required for BERT NLP inference' });
   }
+  if (text.length > 1200) {
+    return res.status(413).json({ error: 'Text is too long for a single NLP analysis (max 1200 chars).' });
+  }
 
-  const result = runBertNlpInference(text);
-  res.json(result);
+  const settings = await getAiSettings();
+  const rate = checkRateLimit(`bert:${identity.userId || req.ip}`, settings.rateLimitPerMin);
+  if (!rate.ok) {
+    return res.status(429).json({
+      error: `Hinay-hinay lang! Try again in ${rate.retryAfterSeconds}s.`,
+      code: 'RATE_LIMITED',
+      retryAfterSeconds: rate.retryAfterSeconds,
+    });
+  }
+
+  const threshold = await getBertConfidenceThreshold();
+  const result = await analyzeLearnerText(text, {
+    threshold,
+    remote: remote !== false,
+    timeoutMs: Number(process.env.BERT_ANALYZE_TIMEOUT_MS) || undefined,
+  });
+
+  logAuditEvent({
+    eventType: 'BERT_INTENT_CLASSIFIED',
+    category: 'AI_INFERENCE',
+    actor: identity.userId || 'anonymous',
+    actorRole: 'Learner',
+    description: `NLP analysis [${result.engine}]: intent=${result.predictedIntent} (${Math.round(
+      result.intentConfidence * 100
+    )}%), language=${result.detectedLanguage}`,
+    severity: 'SUCCESS',
+    latencyMs: result.latencyMs,
+    metadata: {
+      predictedIntent: result.predictedIntent,
+      confidence: result.intentConfidence,
+      language: result.detectedLanguage,
+      dialect: result.dialect,
+      engine: result.engine,
+      source: result.source,
+      remoteModel: result.remoteModel,
+      lowConfidence: result.lowConfidence,
+      threshold,
+      charCount: text.length,
+      entities: result.entities,
+    },
+  });
+
+  return res.json({
+    ...result,
+    predictedIntentLabel: result.predictedIntent.replace(/_/g, ' '),
+  });
+});
+
+// Public-safe capability probe for the NLP engine (no secrets, no model output).
+// `localBert.loaded` is only true after the tokenizer and ONNX session actually
+// loaded; having HF_TOKEN or model files on disk is not reported as active.
+app.get('/api/sulti/nlp-status', async (req: Request, res: Response) => {
+  const identity = await resolveIdentity(req);
+  if (!requireVerifiedUser(identity, res)) return;
+
+  const status = getNlpStatus();
+  return res.json({
+    ...status,
+    confidenceThreshold: await getBertConfidenceThreshold(),
+  });
 });
 
 // Whisper & Gemini Speech-to-Text Endpoint (gemini-3.5-transcribe)
@@ -1920,6 +1994,28 @@ wss.on('connection', async (clientWs: WebSocket) => {
 
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`SultiAI Full-Stack Server running on http://0.0.0.0:${PORT}`);
+
+  // Warm the local BERT encoder after the HTTP server is accepting requests.
+  // This is non-blocking: chat/voice turns use the offline classifier until the
+  // tokenizer + ONNX session are ready. Set BERT_WARMUP=false to disable.
+  if ((process.env.BERT_WARMUP || 'true').trim().toLowerCase() !== 'false') {
+    void warmLocalBert().then((status) => {
+      if (status.loaded) {
+        console.log(
+          `[NLP] warmup complete: ${status.baseModelId} via ${status.modelId} ` +
+            `(${status.dtype}, ${status.dimensions}d, load ${status.loadMs}ms)` +
+            (status.provenance?.verified ? ' [verified]' : '')
+        );
+      } else if (status.enabled && !status.available) {
+        console.warn(
+          '[NLP] local BERT files are not installed; using the offline TF-IDF classifier. ' +
+            'Run `npm run nlp:export-bert` to enable local BERT.'
+        );
+      } else if (status.error) {
+        console.warn(`[NLP] local BERT warmup failed: ${status.error}`);
+      }
+    });
+  }
 });
 
 // ----------------------------------------------------------------------------

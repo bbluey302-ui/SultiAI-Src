@@ -13,6 +13,9 @@ server/audio-cache/
 server/models/**/onnx/
 server/models/**/*.onnx
 
+# local NLP model artifacts (ONNX weights, tokenizer cache, centroids)
+/models/
+
 # dependencies
 node_modules/
 
@@ -46,6 +49,20 @@ yarn-error.*
 .env
 .env.*
 !.env.example
+# backups and credential files must never be committed
+.env.bak
+.env.*.bak
+*.env.bak
+*.secret
+*.secrets
+*.keystore
+secrets/
+.secrets/
+.direnv/
+.envrc
+service-account*.json
+*-service-account.json
+firebase-adminsdk-*.json
 
 # typescript
 *.tsbuildinfo
@@ -81,3 +98,24 @@ nul
 
 # Local Netlify folder
 .netlify
+
+# Generated TTS audio cache
+server/audio-cache/
+
+# local scratch files / debug snippets (never committed)
+.tmp*
+_chk.js
+_chk.mjs
+_test3000.cjs
+
+# ad-hoc local backups of files and folders
+*-backup
+*-backup/
+android-react-native-backup/
+src-react-native-backup/
+
+# tool caches and machine-specific configs
+.autohand/
+.freebuff/
+.gradle/
+local.properties

@@ -1,0 +1,29 @@
+{
+  "name": "SultiAI - Bisaya Language & Communication Hub",
+  "short_name": "SultiAI",
+  "description": "An AI-powered Bisaya/Cebuano language-learning and communication platform.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#08121D",
+  "theme_color": "#00B8A9",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/sulti-icon.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}

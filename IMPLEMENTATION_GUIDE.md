@@ -198,7 +198,8 @@ import { VoiceChatInterface } from '../components/VoiceChatInterface';
 
 export const HomeScreen = () => {
   const [showVoiceChat, setShowVoiceChat] = useState(false);
-  const GROQ_API_KEY = process.env.EXPO_PUBLIC_GROQ_API_KEY || 'your-grok-api-key';
+  // AI provider keys stay on the server. The app calls the SultiAI backend,
+  // which reads GROQ_API_KEY from its own environment.
 
   const quickActions = [
     { id: 'greetings', icon: '👋', label: 'Greetings', color: '#0EA5E9' },
@@ -287,7 +288,8 @@ export const HomeScreen = () => {
         </>
       ) : (
         // Voice Chat Interface
-        <VoiceChatInterface apiKey={GROQ_API_KEY} />
+        // The backend injects the provider key; no key ships to the client.
+        <VoiceChatInterface />
       )}
     </View>
   );
@@ -514,11 +516,11 @@ describe('VoiceChatService', () => {
 
 ### Environment Setup
 ```bash
-# Create .env file
+# Create .env file (server-side only; never use EXPO_PUBLIC_/VITE_ for secrets)
 cat > .env << 'EOF'
-EXPO_PUBLIC_GROQ_API_KEY=your_groq_api_key_here
-EXPO_PUBLIC_ELEVENLABS_API_KEY=your_elevenlabs_api_key_here
-EXPO_PUBLIC_OPENAI_API_KEY=your_openai_api_key_here
+GROQ_API_KEY=your_groq_api_key_here
+ELEVENLABS_API_KEY=your_elevenlabs_api_key_here
+OPENROUTER_API_KEY=your_openrouter_api_key_here
 EOF
 
 # Install dependencies

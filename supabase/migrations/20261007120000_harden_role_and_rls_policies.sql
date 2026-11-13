@@ -224,16 +224,43 @@ CREATE TRIGGER guard_users_privileged_columns
 -- body, and CREATE POLICY would otherwise collide.
 
 DROP POLICY IF EXISTS "Admins can manage roles" ON public.roles;
-CREATE POLICY "Admins can manage roles" ON public.roles
-  FOR ALL USING (is_admin()) WITH CHECK (is_admin());
+DO $_sguard_$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'roles' AND column_name = 'user_id' AND data_type = 'uuid'
+  ) THEN
+    EXECUTE $_spol$CREATE POLICY "Admins can manage roles" ON public.roles
+  FOR ALL USING (is_admin()) WITH CHECK (is_admin())$_spol$;
+  END IF;
+END
+$_sguard_$;
 
 DROP POLICY IF EXISTS "Admins can manage permissions" ON public.permissions;
-CREATE POLICY "Admins can manage permissions" ON public.permissions
-  FOR ALL USING (is_admin()) WITH CHECK (is_admin());
+DO $_sguard_$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'permissions' AND column_name = 'user_id' AND data_type = 'uuid'
+  ) THEN
+    EXECUTE $_spol$CREATE POLICY "Admins can manage permissions" ON public.permissions
+  FOR ALL USING (is_admin()) WITH CHECK (is_admin())$_spol$;
+  END IF;
+END
+$_sguard_$;
 
 DROP POLICY IF EXISTS "Admins can manage role permissions" ON public.role_permissions;
-CREATE POLICY "Admins can manage role permissions" ON public.role_permissions
-  FOR ALL USING (is_admin()) WITH CHECK (is_admin());
+DO $_sguard_$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'role_permissions' AND column_name = 'user_id' AND data_type = 'uuid'
+  ) THEN
+    EXECUTE $_spol$CREATE POLICY "Admins can manage role permissions" ON public.role_permissions
+  FOR ALL USING (is_admin()) WITH CHECK (is_admin())$_spol$;
+  END IF;
+END
+$_sguard_$;
 
 -- ============================================================================
 -- 5. M-7 - the missing column, and reissue the two definer-rights views

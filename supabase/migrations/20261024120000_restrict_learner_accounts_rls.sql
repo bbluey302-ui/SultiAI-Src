@@ -21,21 +21,21 @@ CREATE POLICY "Learner accounts readable by owner"
 ON public.learner_accounts
 FOR SELECT
 TO authenticated
-USING (id = auth.uid());
+USING (id = auth.uid()::text);
 
 -- Allow authenticated users to insert only their own row (defensive; server uses service_role)
 CREATE POLICY "Learner accounts insertable by owner"
 ON public.learner_accounts
 FOR INSERT
 TO authenticated
-WITH CHECK (id = auth.uid());
+WITH CHECK (id = auth.uid()::text);
 
 -- Allow authenticated users to update only their own row (defensive; server uses service_role)
 CREATE POLICY "Learner accounts updatable by owner"
 ON public.learner_accounts
 FOR UPDATE
 TO authenticated
-USING (id = auth.uid())
-WITH CHECK (id = auth.uid());
+USING (id = auth.uid()::text)
+WITH CHECK (id = auth.uid()::text);
 
 -- No policies for anon; service_role bypasses RLS

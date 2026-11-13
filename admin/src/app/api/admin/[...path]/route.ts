@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { HttpError, requireAdmin } from '@/lib/supabase-admin';
+import type { AdminIdentity } from '@/lib/supabase-admin';
 import * as db from '@/server/admin';
 import type {
   AdminSettings,
@@ -43,7 +44,11 @@ async function readJson(request: Request): Promise<Record<string, unknown>> {
   }
 }
 
-async function dispatch(request: Request, segments: string[]): Promise<unknown> {
+async function dispatch(
+  request: Request,
+  segments: string[],
+  admin: AdminIdentity
+): Promise<unknown> {
   const method = request.method.toUpperCase();
   const url = new URL(request.url);
   const [root, second, third] = segments;
@@ -138,6 +143,101 @@ async function dispatch(request: Request, segments: string[]): Promise<unknown> 
 
   // ---- AI / XP -------------------------------------------------------------
   if (root === 'ai' && second === 'usage' && method === 'GET') return db.getAiUsage();
+  if (root === 'ai' && second === 'tokens') {
+    if (third === 'overview' && method === 'GET') return db.getAiTokenOverview();
+
+    if (third === 'wallets') {
+      const walletUserId = segments[3];
+      if (!walletUserId && method === 'GET') {
+        return db.listAiWallets({
+          search: url.searchParams.get('search') ?? '',
+          page: Number(url.searchParams.get('page') ?? 1),
+          perPage: Number(url.searchParams.get('perPage') ?? 20),
+        });
+      }
+      if (walletUserId && method === 'PATCH') {
+        const body = await readJson(request);
+        return db.adminUpdateAiWallet({
+          userId: walletUserId,
+          planId: body.planId as string | undefined,
+          monthlyOverride:
+            body.monthlyOverride === undefined
+              ? undefined
+              : body.monthlyOverride === null
+                ? null
+                : Number(body.monthlyOverride),
+          note: body.note === undefined ? undefined : (body.note as string | null),
+          adjustBalance:
+            body.adjustBalance === undefined ? undefined : Number(body.adjustBalance),
+          adminEmail: admin.email,
+        });
+      }
+    }
+
+    if (third === 'grant' && method === 'POST') {
+      const body = await readJson(request);
+      return db.adminGrantAiTokens({
+        userId: String(body.userId ?? ''),
+        amount: Number(body.amount ?? 0),
+        reason: (body.reason as string) || 'Manual grant',
+        adminEmail: admin.email,
+      });
+    }
+
+    if (third === 'providers') {
+      const providerId = segments[3];
+      if (!providerId && method === 'GET') return db.listAiProviders();
+      if (providerId && method === 'PATCH') {
+        const body = await readJson(request);
+        return db.adminUpdateAiProvider({
+          id: providerId,
+          status: body.status as string | undefined,
+          monthlyQuota:
+            body.monthlyQuota === undefined ? undefined : Number(body.monthlyQuota),
+        });
+      }
+    }
+
+    if (third === 'settings') {
+      if (method === 'GET') return db.getAiSettingsAdmin();
+      if (method === 'PUT') {
+        return db.adminUpdateAiSettings(
+          (await readJson(request)) as Parameters<typeof db.adminUpdateAiSettings>[0]
+        );
+      }
+    }
+
+    if (third === 'voice-profiles') {
+      if (method === 'GET') return db.listAiVoiceProfiles();
+      if (method === 'PUT') {
+        const body = await readJson(request);
+        return db.adminUpsertAiVoiceProfile({
+          agentId: String(body.agentId ?? ''),
+          language: String(body.language ?? ''),
+          voiceId: String(body.voiceId ?? ''),
+          modelId: body.modelId ? String(body.modelId) : undefined,
+          displayName: body.displayName ? String(body.displayName) : undefined,
+        });
+      }
+    }
+
+    if (third === 'upgrades') {
+      const upgradeId = segments[3];
+      if (!upgradeId && method === 'GET') {
+        return db.listAiUpgrades(url.searchParams.get('status') ?? 'pending');
+      }
+      if (upgradeId && segments[4] === 'review' && method === 'POST') {
+        const body = await readJson(request);
+        return db.adminReviewAiUpgrade({
+          id: upgradeId,
+          action: body.action === 'reject' ? 'reject' : 'approve',
+          note: body.note ? String(body.note) : undefined,
+          adminEmail: admin.email,
+        });
+      }
+    }
+  }
+
   if (root === 'xp' && second === 'overview' && method === 'GET') return db.getXpOverview();
 
   // ---- Feedback ------------------------------------------------------------
@@ -177,6 +277,7 @@ async function dispatch(request: Request, segments: string[]): Promise<unknown> 
       actorId: actorParam && actorParam !== 'all' && Number.isFinite(actorNum) && actorNum > 0
         ? actorNum
         : 'all',
+      actorKind: 'all',
     });
   }
 
@@ -193,9 +294,9 @@ function errorResponse(error: unknown): NextResponse {
 
 async function run(request: Request, ctx: Segments): Promise<NextResponse> {
   try {
-    await requireAdmin(request);
+    const admin = await requireAdmin(request);
     const { path } = await ctx.params;
-    const result = await dispatch(request, path ?? []);
+    const result = await dispatch(request, path ?? [], admin);
     return NextResponse.json(result === undefined ? { ok: true } : result);
   } catch (error) {
     return errorResponse(error);

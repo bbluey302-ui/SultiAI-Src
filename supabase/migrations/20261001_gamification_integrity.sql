@@ -37,9 +37,18 @@ CREATE INDEX IF NOT EXISTS idx_learning_sessions_user_date
 
 ALTER TABLE public.learning_sessions ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Users manage own learning sessions" ON public.learning_sessions;
-CREATE POLICY "Users manage own learning sessions" ON public.learning_sessions
+DO $_sguard_$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'learning_sessions' AND column_name = 'user_id' AND data_type = 'uuid'
+  ) THEN
+    EXECUTE $_spol$CREATE POLICY "Users manage own learning sessions" ON public.learning_sessions
   FOR ALL USING (user_id = get_user_id() OR is_admin())
-  WITH CHECK (user_id = get_user_id() OR is_admin());
+  WITH CHECK (user_id = get_user_id() OR is_admin())$_spol$;
+  END IF;
+END
+$_sguard_$;
 
 -- Module/lesson mastery (only per-vocab-word mastery existed before).
 ALTER TABLE public.learning_progress ADD COLUMN IF NOT EXISTS mastery_score REAL DEFAULT 0;
@@ -53,12 +62,30 @@ ALTER TABLE public.learning_progress
 -- authenticated/anon caller. Replaces the WITH CHECK (true) policy from
 -- 20260904_fix_rls_policies.sql:402 ("System can insert audit logs").
 DROP POLICY IF EXISTS "System can insert audit logs" ON public.audit_logs;
-CREATE POLICY "Service role and admins can insert audit logs" ON public.audit_logs
-  FOR INSERT WITH CHECK (is_admin() OR auth.role() = 'service_role');
+DO $_sguard_$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'audit_logs' AND column_name = 'user_id' AND data_type = 'uuid'
+  ) THEN
+    EXECUTE $_spol$CREATE POLICY "Service role and admins can insert audit logs" ON public.audit_logs
+  FOR INSERT WITH CHECK (is_admin() OR auth.role() = 'service_role')$_spol$;
+  END IF;
+END
+$_sguard_$;
 
 -- RLS tightening #2: lesson_items should require authenticated, not anon.
 -- Replaces "Anyone can view lesson items" from
 -- 20260926_learning_path_integration.sql:48.
 DROP POLICY IF EXISTS "Anyone can view lesson items" ON public.lesson_items;
-CREATE POLICY "Authenticated users can view lesson items" ON public.lesson_items
-  FOR SELECT TO authenticated USING (true);
+DO $_sguard_$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'lesson_items' AND column_name = 'user_id' AND data_type = 'uuid'
+  ) THEN
+    EXECUTE $_spol$CREATE POLICY "Authenticated users can view lesson items" ON public.lesson_items
+  FOR SELECT TO authenticated USING (true)$_spol$;
+  END IF;
+END
+$_sguard_$;

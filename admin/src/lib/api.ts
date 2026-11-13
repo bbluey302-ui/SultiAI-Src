@@ -5,6 +5,12 @@ import type {
   AuditLogFilters,
   AuditLogResponse,
   AiUsageStats,
+  AiProviderRow,
+  AiSettingsPayload,
+  AiTokenOverview,
+  AiUpgradeRow,
+  AiVoiceProfileRow,
+  AiWalletList,
   CommunityPost,
   CommunityReport,
   FeedbackItem,
@@ -126,6 +132,69 @@ export const api = {
     http('PATCH', `/api/admin/community/reports/${id}`, { status }),
 
   getAiUsage: (): Promise<AiUsageStats> => http('GET', '/api/admin/ai/usage'),
+
+  getAiTokenOverview: (): Promise<AiTokenOverview> =>
+    http('GET', '/api/admin/ai/tokens/overview'),
+
+  listAiWallets: (search = '', page = 1, perPage = 20): Promise<AiWalletList> =>
+    http(
+      'GET',
+      `/api/admin/ai/tokens/wallets?search=${encodeURIComponent(search)}&page=${page}&perPage=${perPage}`
+    ),
+
+  updateAiWallet: (
+    userId: string,
+    patch: {
+      planId?: string;
+      monthlyOverride?: number | null;
+      note?: string | null;
+      adjustBalance?: number;
+    }
+  ): Promise<{ ok: true }> => http('PATCH', `/api/admin/ai/tokens/wallets/${userId}`, patch),
+
+  grantAiTokens: (
+    userId: string,
+    amount: number,
+    reason?: string
+  ): Promise<{ ok: true; balance: number }> =>
+    http('POST', '/api/admin/ai/tokens/grant', { userId, amount, reason }),
+
+  listAiProviders: (): Promise<AiProviderRow[]> =>
+    http('GET', '/api/admin/ai/tokens/providers'),
+
+  updateAiProvider: (
+    id: string,
+    patch: { status?: string; monthlyQuota?: number }
+  ): Promise<{ ok: true }> =>
+    http('PATCH', `/api/admin/ai/tokens/providers/${encodeURIComponent(id)}`, patch),
+
+  getAiSettings: (): Promise<AiSettingsPayload> =>
+    http('GET', '/api/admin/ai/tokens/settings'),
+
+  updateAiSettings: (
+    patch: Partial<Omit<AiSettingsPayload, 'updatedAt'>>
+  ): Promise<AiSettingsPayload> => http('PUT', '/api/admin/ai/tokens/settings', patch),
+
+  listAiVoiceProfiles: (): Promise<AiVoiceProfileRow[]> =>
+    http('GET', '/api/admin/ai/tokens/voice-profiles'),
+
+  upsertAiVoiceProfile: (payload: {
+    agentId: string;
+    language: string;
+    voiceId: string;
+    modelId?: string;
+    displayName?: string;
+  }): Promise<{ ok: true }> => http('PUT', '/api/admin/ai/tokens/voice-profiles', payload),
+
+  listAiUpgrades: (status = 'pending'): Promise<AiUpgradeRow[]> =>
+    http('GET', `/api/admin/ai/tokens/upgrades?status=${encodeURIComponent(status)}`),
+
+  reviewAiUpgrade: (
+    id: string,
+    action: 'approve' | 'reject',
+    note?: string
+  ): Promise<{ ok: true; status: string }> =>
+    http('POST', `/api/admin/ai/tokens/upgrades/${id}/review`, { action, note }),
 
   getXpOverview: (): Promise<XpOverview> => http('GET', '/api/admin/xp/overview'),
 
